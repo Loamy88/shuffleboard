@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon';
-import Utils from './utils.js';
+import { createMaterial } from './utils.js';
 
 class Disc {
     constructor(scene, world, x, z, color, playerNum) {
@@ -77,3 +77,4 @@ class Disc {
 }
 
 export default Disc;
+
