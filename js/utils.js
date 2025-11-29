@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Utility functions for the game
 
 // Generate a random number between min and max
@@ -43,3 +44,4 @@ export function createMaterial(color, options = {}) {
     };
     return new THREE.MeshStandardMaterial({ ...defaults, ...options });
 }
+
