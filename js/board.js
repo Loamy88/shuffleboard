@@ -27,7 +27,7 @@ class Board {
             this.height, 
             this.length
         );
-        const material = Utils.createMaterial(0x8B4513, {
+        const material = createMaterial(0x8B4513, {
             roughness: 0.8,
             metalness: 0.2
         });
@@ -80,5 +80,6 @@ class Board {
 }
 
 export default Board;
+
 
 
