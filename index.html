@@ -1,460 +1,99 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>3D Shuffleboard — GitHub Pages Ready</title>
-  <style>
-    html,body{margin:0;height:100%;overflow:hidden;background:#111}
-    #canvas-container{width:100%;height:100%;display:block;position:relative}
-    .hud{position:absolute;left:12px;top:12px;color:#eee;font-family:Inter,system-ui,Arial;padding:12px;background:rgba(0,0,0,0.35);border-radius:8px}
-    .controls{position:absolute;right:12px;top:12px;color:#eee;font-family:Inter,system-ui,Arial;padding:12px;background:rgba(0,0,0,0.35);border-radius:8px;text-align:right}
-    .center{position:absolute;left:50%;transform:translateX(-50%);bottom:18px;color:#fff;font-family:Inter,system-ui,Arial;padding:8px 12px;background:rgba(0,0,0,0.4);border-radius:10px}
-    button{background:#1f8cff;border:none;color:white;padding:8px 12px;border-radius:6px;cursor:pointer}
-    .big{font-size:16px;font-weight:600}
-    .small{font-size:12px;opacity:0.85}
-    #exportBtn{margin-left:8px}
-    .scoreBox{display:flex;gap:12px}
-    .playerBox{padding:8px;background:rgba(255,255,255,0.03);border-radius:6px}
-    .ready{color:#bfffbf}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Shuffleboard</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-size: 24px;
+            pointer-events: none;
+        }
+        #power-meter {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            display: none;
+        }
+        #power-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4CAF50, #FFC107, #FF5722);
+            transition: width 0.1s;
+        }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 24px;
+            display: none;
+            text-align: center;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 60px;
+            left: 20px;
+            color: white;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            max-width: 300px;
+        }
+    </style>
 </head>
 <body>
-<div id="canvas-container"></div>
-<div class="hud">
-  <div class="scoreBox">
-    <div class="playerBox"><div class="big">Player A</div><div id="scoreA" class="small">0 pts</div></div>
-    <div class="playerBox"><div class="big">Player B</div><div id="scoreB" class="small">0 pts</div></div>
-  </div>
-  <div class="small">Round: <span id="roundNum">1</span> &nbsp; Turn: <span id="turnInfo">A</span></div>
-</div>
-<div class="controls">
-  <div class="small">Controls:</div>
-  <div class="small">A/D — move left/right &nbsp; ↑/↓ — tilt angle</div>
-  <div class="small">Space (hold) or Left-click (hold) — charge & release to shoot</div>
-  <div style="margin-top:8px;"><button id="exportBtn">Export Round Data</button></div>
-</div>
-<div class="center" id="centerUI">Move & aim — Space to charge 🟦</div>
+    <div id="game-container">
+        <div id="ui">
+            <div id="player1-score">Player 1: 0</div>
+            <div id="round">Round: 1</div>
+            <div id="player2-score">Player 2: 0</div>
+        </div>
+        <div id="power-meter">
+            <div id="power-fill"></div>
+        </div>
+        <div id="message"></div>
+        <div id="instructions">
+            <b>Controls:</b><br>
+            A/D or Left/Right: Move<br>
+            W/S or Up/Down: Adjust angle<br>
+            Hold SPACE: Charge shot<br>
+            Release SPACE: Shoot
+        </div>
+    </div>
 
-<script src="https://unpkg.com/three@0.156.0/build/three.min.js"></script>
-<script>
-// 3D Shuffleboard single-file game
-// Built to be hosted on GitHub Pages. Includes hooks for external AI and data export.
-
-// ---------- Config ----------
-const CONFIG = {
-  board: { length: 1400, width: 300, thickness: 8 },
-  disc: { radius: 18, mass: 1, colorA: 0x1565c0, colorB: 0xd32f2f },
-  physics: { friction: 0.994, spinFriction: 0.995, collisionDamping: 0.95, dt: 1/60 },
-  scoring: [ // triangular scoring regions from far end (y = board.length/2)
-    { score: 10, depth: 160 },
-    { score: 8, depth: 200 },
-    { score: 7, depth: 240 },
-    { score: -10, depth: 400 }
-  ],
-  discsPerPlayer: 4,
-  winPoints: 75
-};
-
-// ---------- Three.js scene ----------
-const container = document.getElementById('canvas-container');
-const scene = new THREE.Scene();
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(container.clientWidth, container.clientHeight);
-renderer.shadowMap.enabled = true;
-container.appendChild(renderer.domElement);
-
-const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 5000);
-camera.position.set(0, 120, -380);
-camera.lookAt(0, 0, 0);
-
-window.addEventListener('resize', ()=>{
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  camera.aspect = container.clientWidth / container.clientHeight;
-  camera.updateProjectionMatrix();
-});
-
-// lights
-const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.9);
-hemi.position.set(0,300,0); scene.add(hemi);
-const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(-200,400,-200); dir.castShadow=true; scene.add(dir);
-
-// ---------- Board ----------
-const boardGroup = new THREE.Group();
-scene.add(boardGroup);
-const boardLength = CONFIG.board.length;
-const boardWidth = CONFIG.board.width;
-
-const boardGeo = new THREE.BoxGeometry(boardWidth, CONFIG.board.thickness, boardLength);
-const boardMat = new THREE.MeshStandardMaterial({color:0x6d3b1f, metalness:0.15, roughness:0.6});
-const board = new THREE.Mesh(boardGeo, boardMat); board.receiveShadow=true; board.position.set(0, -CONFIG.board.thickness/2, boardLength/2 - 50);
-boardGroup.add(board);
-
-// add polished surface plane (slightly above board)
-const surface = new THREE.Mesh(new THREE.PlaneGeometry(boardWidth*1.05, boardLength*1.05), new THREE.MeshStandardMaterial({color:0x9e8169, metalness:0.3, roughness:0.2}));
-surface.rotation.x = -Math.PI/2; surface.position.z = boardLength/2 - 50; surface.receiveShadow=true; surface.position.y = 0.5;
-boardGroup.add(surface);
-
-// scoring triangle visual at far end
-const triGroup = new THREE.Group(); scene.add(triGroup);
-const farY = boardLength - 50; // far end y coordinate (mesh is centered)
-const triangleMaxHalf = boardWidth/2 - 10;
-let accumDepth = 0;
-CONFIG.scoring.forEach((reg,idx)=>{
-  const depth = reg.depth;
-  const top = accumDepth;
-  const bottom = accumDepth + depth;
-  // create trapezoid slice to mimic triangular taper
-  const shape = new THREE.Shape();
-  const x1 = -triangleMaxHalf*(1 - top/(CONFIG.scoring.reduce((a,r)=>a+r.depth,0)+0.01));
-  const x2 = triangleMaxHalf*(1 - top/(CONFIG.scoring.reduce((a,r)=>a+r.depth,0)+0.01));
-  const x3 = triangleMaxHalf*(1 - bottom/(CONFIG.scoring.reduce((a,r)=>a+r.depth,0)+0.01));
-  const x4 = -x3;
-  // rectangle-like slice
-  shape.moveTo(x1, -top);
-  shape.lineTo(x2, -top);
-  shape.lineTo(x3, -bottom);
-  shape.lineTo(x4, -bottom);
-  shape.lineTo(x1, -top);
-  const geom = new THREE.ShapeGeometry(shape);
-  const col = reg.score>0? (reg.score==10?0xffd54f:0xaee6ff) : 0xff8a80;
-  const mat = new THREE.MeshStandardMaterial({color:col, transparent:true, opacity:0.95, side:THREE.DoubleSide});
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.rotation.x = -Math.PI/2;
-  mesh.position.z = farY - bottom; mesh.receiveShadow=true;
-  triGroup.add(mesh);
-  accumDepth += depth;
-});
-
-// border rails
-const railMat = new THREE.MeshStandardMaterial({color:0x2b2b2b, metalness:0.6, roughness:0.4});
-const railLeft = new THREE.Mesh(new THREE.BoxGeometry(10,20,boardLength), railMat); railLeft.position.set(-boardWidth/2 -5, 9, boardLength/2 -50); railLeft.castShadow=true; scene.add(railLeft);
-const railRight = railLeft.clone(); railRight.position.x = boardWidth/2 +5; scene.add(railRight);
-
-// ---------- Stick (visible to player) ----------
-const stick = new THREE.Group(); scene.add(stick);
-function createStick(){
-  stick.clear();
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(6,6,220,12), new THREE.MeshStandardMaterial({color:0xB28A54, metalness:0.3, roughness:0.45}));
-  pole.position.set(0, 110, -260); pole.castShadow=true; stick.add(pole);
-  const fork = new THREE.Mesh(new THREE.BoxGeometry(140,18,14), new THREE.MeshStandardMaterial({color:0x24333b, metalness:0.2, roughness:0.4}));
-  fork.position.set(0, 220, -260); fork.castShadow=true; stick.add(fork);
-  const tipsL = new THREE.Mesh(new THREE.SphereGeometry(10,12,8), new THREE.MeshStandardMaterial({color:0xffd54f})); tipsL.position.set(-64, 222, -260); stick.add(tipsL);
-  const tipsR = tipsL.clone(); tipsR.position.x = 64; stick.add(tipsR);
-}
-createStick();
-
-// The visible stick will move left-right and tilt to show aiming
-let aimX = 0; // left-right offset in world units
-let aimAngle = 0; // radians up/down tilt
-function updateStickTransform(){
-  stick.position.x = aimX;
-  stick.rotation.x = aimAngle;
-}
-
-// ---------- Disc physics (2D on board surface) ----------
-class Disc{
-  constructor(x,z,player){
-    this.x = x; // x across board (left-right)
-    this.z = z; // z along board (toward far end). board origin is centered at 0,0 with far end positive z
-    this.vx = 0; this.vz = 0;
-    this.radius = CONFIG.disc.radius;
-    this.mass = CONFIG.disc.mass;
-    this.player = player; // 0 or 1
-    this.mesh = null;
-    this.id = Math.random().toString(36).slice(2,9);
-    this.createMesh();
-  }
-  createMesh(){
-    const geom = new THREE.CylinderGeometry(this.radius, this.radius, 6, 32);
-    const mat = new THREE.MeshStandardMaterial({color: this.player===0?CONFIG.disc.colorA:CONFIG.disc.colorB, metalness:0.5, roughness:0.3});
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.rotation.x = -Math.PI/2; mesh.position.set(this.x,6,this.z);
-    mesh.castShadow=true; mesh.receiveShadow=true;
-    scene.add(mesh);
-    this.mesh = mesh;
-  }
-  step(dt){
-    // integrate
-    this.x += this.vx*dt;
-    this.z += this.vz*dt;
-    // friction deceleration
-    this.vx *= CONFIG.physics.friction;
-    this.vz *= CONFIG.physics.friction;
-    // small random jitter
-    this.vx += (Math.random()-0.5)*0.01;
-    this.vz += (Math.random()-0.5)*0.01;
-    // update mesh
-    if(this.mesh) this.mesh.position.set(this.x,6,this.z);
-  }
-}
-
-let discs = [];
-function spawnDisc(x,z,player){
-  const d = new Disc(x,z,player);
-  discs.push(d);
-  return d;
-}
-
-function stepPhysics(dt){
-  // collisions: circle-circle
-  for(let i=0;i<discs.length;i++){
-    const a = discs[i];
-    for(let j=i+1;j<discs.length;j++){
-      const b = discs[j];
-      const dx = b.x - a.x; const dz = b.z - a.z; const dist = Math.hypot(dx,dz);
-      const minD = a.radius + b.radius - 1; // minor overlap allowance
-      if(dist < minD && dist>0.0001){
-        // resolve overlap
-        const overlap = (minD - dist)/2;
-        const nx = dx / dist; const nz = dz / dist;
-        a.x -= nx*overlap; a.z -= nz*overlap;
-        b.x += nx*overlap; b.z += nz*overlap;
-        // velocity exchange (elastic-ish)
-        const relvx = b.vx - a.vx; const relvz = b.vz - a.vz;
-        const relVelAlong = relvx*nx + relvz*nz;
-        if(relVelAlong < 0) continue;
-        const impulse = relVelAlong * CONFIG.physics.collisionDamping;
-        a.vx += nx * impulse * (b.mass/(a.mass+b.mass));
-        a.vz += nz * impulse * (b.mass/(a.mass+b.mass));
-        b.vx -= nx * impulse * (a.mass/(a.mass+b.mass));
-        b.vz -= nz * impulse * (a.mass/(a.mass+b.mass));
-      }
-    }
-  }
-  // walls and rails
-  discs.forEach(d=>{
-    // left/right rails
-    const half = boardWidth/2 - d.radius;
-    if(d.x < -half){ d.x = -half; d.vx *= -0.35; }
-    if(d.x > half){ d.x = half; d.vx *= -0.35; }
-    // front/back off-board
-    const backLimit = -200; // where we spawn player
-    const farLimit = boardLength + 200;
-    if(d.z < backLimit) { d.z = backLimit; d.vz *= -0.25; }
-    if(d.z > farLimit) { /* allow to fall off and be removed later */ }
-    d.step(dt);
-  });
-  // remove discs far away
-  discs = discs.filter(d=>{
-    const distFromBoard = Math.hypot(d.x, d.z - (boardLength/2 - 50));
-    if(distFromBoard > boardLength*3) { if(d.mesh) scene.remove(d.mesh); return false; }
-    return true;
-  });
-}
-
-// ---------- Gameplay state ----------
-let gameState = {
-  round: 1, turnPlayer: 0, // 0 -> A, 1 -> B
-  shotsTakenThisRound: [0,0],
-  scores: [0,0],
-  placed: [] // log of all shots
-};
-
-// starting positions for spawning discs (player side near camera/back)
-const spawnZ = -200; const spawnY = 6;
-
-// input / aiming / shooting
-let charging = false; let chargeStart = 0; let chargePower = 0; const maxChargeTime = 1500; // ms
-let lastShotTime = 0;
-
-function startCharge(){ if(charging) return; charging=true; chargeStart = performance.now(); document.getElementById('centerUI').textContent = 'Charging...'; }
-function endCharge(){ if(!charging) return; charging=false; const t = performance.now() - chargeStart; chargePower = Math.min(1, t/maxChargeTime);
-  doShoot(chargePower);
-  chargePower = 0; document.getElementById('centerUI').textContent = 'Move & aim — Space to charge 🟦'; }
-
-function doShoot(powerRatio){
-  // spawn disc at spawnX corresponding to aimX and spawnZ
-  if(gameState.shotsTakenThisRound[gameState.turnPlayer] >= CONFIG.discsPerPlayer) return;
-  const spawnX = aimX; const spawnZpos = spawnZ;
-  const d = spawnDisc(spawnX, spawnZpos, gameState.turnPlayer);
-  // velocity based on aim angle and power
-  const maxSpeed = (boardLength) / 0.8; // tuned so max reaches end
-  const angleUp = Math.max(-0.6, Math.min(0.6, aimAngle));
-  const speed = maxSpeed * powerRatio;
-  // aim vector along board + tilt: tilt will give forward component
-  const dirZ = Math.cos(angleUp); const dirY = Math.sin(angleUp);
-  // left-right aim offset modifies lateral velocity
-  const lateral = aimX * 0.05; // small lateral based on position
-  d.vz = Math.abs(dirZ) * speed;
-  d.vx = lateral + Math.tan(-aimAngle*0.1) * (powerRatio*80);
-
-  gameState.placed.push({id:d.id,player:d.player,x:d.x,z:d.z,vx:d.vx,vz:d.vz,time:Date.now(),round:gameState.round});
-  gameState.shotsTakenThisRound[gameState.turnPlayer]++;
-  lastShotTime = performance.now();
-  // alternate turn
-  gameState.turnPlayer = 1 - gameState.turnPlayer;
-  updateHUD();
-}
-
-function updateHUD(){
-  document.getElementById('scoreA').textContent = gameState.scores[0] + ' pts';
-  document.getElementById('scoreB').textContent = gameState.scores[1] + ' pts';
-  document.getElementById('roundNum').textContent = gameState.round;
-  document.getElementById('turnInfo').textContent = (gameState.turnPlayer===0? 'A':'B') + ' • ' + gameState.shotsTakenThisRound.join('/') ;
-}
-updateHUD();
-
-function evaluateRound(){
-  // compute scoring only after both players have shot all discs
-  // For each disc that is at least partially on board, evaluate which triangular region it's in (closest to far end wins within that disc range)
-  const boardFarZ = boardLength - 50; // maximum
-  const totalDepth = CONFIG.scoring.reduce((a,r)=>a+r.depth,0);
-  const halfW = boardWidth/2;
-  const scoresThis = [0,0];
-  discs.forEach(d=>{
-    // determine if disc is on board by comparing z between -inf and boardFarZ + small margin
-    if(d.z < -300 || d.z > boardFarZ + 300) return; // off board
-    // compute how far from far edge along depth
-    const distFromFar = boardFarZ - d.z; // 0 at very far tip, increases toward back
-    if(distFromFar < 0) return; // beyond far edge
-    // compute normalized t = distFromFar / totalDepth
-    const t = distFromFar;
-    let accum=0; let assigned = null;
-    for(let seg of CONFIG.scoring){
-      if(t >= accum && t <= accum + seg.depth){
-        // now compute horizontal allowable width at that position based on linear taper
-        const frac = (accum + seg.depth - t)/totalDepth; // closer to tip -> smaller
-        const allowableHalf = halfW * Math.max(0.12, frac);
-        if(Math.abs(d.x) <= allowableHalf + d.radius){ assigned = seg.score; break; }
-      }
-      accum += seg.depth;
-    }
-    if(assigned !== null){ scoresThis[d.player] += assigned; }
-  });
-  gameState.scores[0] += scoresThis[0]; gameState.scores[1] += scoresThis[1];
-  // reset for next round: remove discs and reset counters
-  discs.forEach(d=>{ if(d.mesh) scene.remove(d.mesh); }); discs = [];
-  gameState.shotsTakenThisRound = [0,0];
-  gameState.round += 1;
-  gameState.turnPlayer = 0;
-  updateHUD();
-  return scoresThis;
-}
-
-// check end conditions after evaluating round
-function checkWin(){
-  if(gameState.scores[0] >= CONFIG.winPoints || gameState.scores[1] >= CONFIG.winPoints){
-    // winner determination
-    if(gameState.scores[0] > gameState.scores[1]) endGame(0);
-    else if(gameState.scores[1] > gameState.scores[0]) endGame(1);
-    else suddenDeath();
-  }
-}
-
-function suddenDeath(){
-  // play one sudden death round: next round only counts; if tie again -> draw
-  document.getElementById('centerUI').textContent = 'Sudden death! One quick round — highest wins.';
-  // flag - next evaluation will decide winner
-  window._suddenDeath = true;
-}
-
-function endGame(winner){
-  document.getElementById('centerUI').textContent = `Player ${winner===0? 'A':'B'} wins! Final: ${gameState.scores[0]} - ${gameState.scores[1]}`;
-}
-
-// ---------- Input handling ----------
-const keys = {};
-window.addEventListener('keydown', e=>{ keys[e.key.toLowerCase()] = true; if(e.key === ' '){ e.preventDefault(); startCharge(); } });
-window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; if(e.key === ' '){ endCharge(); } });
-
-// mouse
-renderer.domElement.addEventListener('mousedown', e=>{ startCharge(); });
-renderer.domElement.addEventListener('mouseup', e=>{ endCharge(); });
-renderer.domElement.addEventListener('mousemove', e=>{
-  // map mouse X across canvas to aimX
-  const rect = renderer.domElement.getBoundingClientRect();
-  const mx = (e.clientX - rect.left)/rect.width*2 -1;
-  aimX = mx * (boardWidth/2 - 30);
-});
-
-// other controls continuous
-function handleControls(dt){
-  if(keys['a'] || keys['arrowleft']) aimX -= 250*dt;
-  if(keys['d'] || keys['arrowright']) aimX += 250*dt;
-  if(keys['arrowup']) aimAngle = Math.max(-0.6, aimAngle - 0.8*dt);
-  if(keys['arrowdown']) aimAngle = Math.min(0.6, aimAngle + 0.8*dt);
-  // clamp
-  aimX = Math.max(-boardWidth/2 + 30, Math.min(boardWidth/2 - 30, aimX));
-  updateStickTransform();
-}
-
-// ---------- Game loop ----------
-let lastTime = performance.now();
-function loop(now){
-  const dt = Math.min(0.03, (now - lastTime)/1000);
-  lastTime = now;
-  handleControls(dt);
-  stepPhysics(dt);
-  // subtle camera parallax to follow aimX
-  camera.position.x += (aimX - camera.position.x)*0.06;
-  camera.lookAt(aimX, 0, 0);
-
-  renderer.render(scene, camera);
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
-
-// ---------- Round-checking/turn flow ----------
-// We'll detect when both players have used all discs and discs have come to rest for scoring
-let lastAction = Date.now();
-setInterval(()=>{
-  const bothDone = (gameState.shotsTakenThisRound[0] === 0 && gameState.shotsTakenThisRound[1] === 0 && gameState.round>1) ? false : true;
-  // Instead, check if total shots used this round equals 2*discsPerPlayer and no discs are moving quickly
-  const shotsUsed = gameState.placed.filter(p=>p.round === gameState.round).length;
-  const required = CONFIG.discsPerPlayer * 2;
-  const anyMoving = discs.some(d=>Math.hypot(d.vx,d.vz) > 4);
-  if(shotsUsed >= required && !anyMoving){
-    // evaluate round
-    const scored = evaluateRound();
-    // check sudden death
-    if(window._suddenDeath){
-      // sudden death decides winner by comparing the scores this round
-      if(scored[0] > scored[1]) endGame(0);
-      else if(scored[1] > scored[0]) endGame(1);
-      else { document.getElementById('centerUI').textContent = 'Draw! No winner.'; }
-      window._suddenDeath = false;
-    } else {
-      // normal flow
-      checkWin();
-      document.getElementById('centerUI').textContent = 'Round scored. Continue to next round.';
-    }
-  }
-}, 1200);
-
-// ---------- Export / AI hooks ----------
-function exportRoundData(){
-  const data = {gameState, discsSnapshot: discs.map(d=>({id:d.id,x:d.x,z:d.z,vx:d.vx,vz:d.vz,player:d.player}))};
-  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `shuffle_round_${gameState.round}.json`; a.click(); URL.revokeObjectURL(url);
-}
-document.getElementById('exportBtn').addEventListener('click', exportRoundData);
-
-// Provide global hooks for external AI files to interact with the game.
-window.ShuffleAPI = {
-  getState: ()=>({
-    round: gameState.round,
-    scores: [...gameState.scores],
-    turnPlayer: gameState.turnPlayer,
-    shotsTakenThisRound: [...gameState.shotsTakenThisRound],
-    discs: discs.map(d=>({id:d.id,x:d.x,z:d.z,vx:d.vx,vz:d.vz,player:d.player}))
-  }),
-  takeAction: (action)=>{
-    // expected action: {type: 'shoot', player:0/1, aimX:..., aimAngle:..., power:0..1}
-    if(action.type === 'shoot'){
-      aimX = Math.max(-boardWidth/2 + 30, Math.min(boardWidth/2 - 30, action.aimX || 0));
-      aimAngle = action.aimAngle || 0;
-      // simulate instant charge and shoot
-      doShoot(Math.max(0, Math.min(1, action.power || 0.5)));
-    }
-  },
-  exportStateJSON: ()=> JSON.stringify({gameState, discs: discs.map(d=>({id:d.id,x:d.x,z:d.z,vx:d.vx,vz:d.vz,player:d.player}))})
-};
-
-// nice welcome / instructions
-document.getElementById('centerUI').textContent = 'Move left/right, tilt, hold Space or click to charge & shoot. Each player shoots 4 discs per round.';
-
-</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script src="game.js"></script>
 </body>
 </html>
