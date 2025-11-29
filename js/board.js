@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon';
-import Utils from './utils.js';
+import { createMaterial } from './utils.js';
 
 class Board {
     constructor(scene, world) {
@@ -80,3 +80,4 @@ class Board {
 }
 
 export default Board;
+
