@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import * as CANNON from 'cannon';
+import * as CANNON from 'cannon-es';
 import { createMaterial } from './utils.js';
 
 class Disc {
@@ -77,4 +77,5 @@ class Disc {
 }
 
 export default Disc;
+
 
