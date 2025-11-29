@@ -1,123 +1,107 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.module.js';
-import Disc from './disc.js';
+import * as THREE from 'three';
+import { degToRad, clamp } from './utils.js';
 
 class Player {
-    constructor(id, color, scene, world, isAI = false) {
-        this.id = id;
-        this.color = color;
+    constructor(scene, isAI = false) {
+        this.scene = scene;
+        this.isAI = isAI;
         this.score = 0;
         this.discs = [];
-        this.scene = scene;
-        this.world = world;
-        this.isAI = isAI;
-        this.discsThrown = 0;
         this.maxDiscs = 4;
-        this.discRadius = 0.15;
-        this.discThickness = 0.1;
+        this.discColor = isAI ? 0x0000ff : 0xff0000; // AI is blue, player is red
+        this.currentPower = 0;
+        this.powerIncreasing = true;
+        this.angle = 0;
+        this.position = new THREE.Vector3(0, 0, -2);
         
-        // Create the player's discs
-        this.createDiscs();
+        // Create player's stick
+        this.createStick();
     }
-    
-    createDiscs() {
-        for (let i = 0; i < this.maxDiscs; i++) {
-            const disc = new Disc(
-                this.discRadius,
-                this.discThickness,
-                this.color,
-                this.scene,
-                this.world
-            );
-            this.discs.push(disc);
+
+    createStick() {
+        const stickGeometry = new THREE.CylinderGeometry(0.03, 0.03, 1, 8);
+        const stickMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x8B4513,
+            roughness: 0.8,
+            metalness: 0.2
+        });
+        this.stick = new THREE.Mesh(stickGeometry, stickMaterial);
+        this.stick.position.copy(this.position);
+        this.stick.position.y = 0.5;
+        this.stick.rotation.x = degToRad(90);
+        this.scene.add(this.stick);
+    }
+
+    update(delta) {
+        // Update stick position and rotation
+        this.stick.position.x = this.position.x;
+        this.stick.rotation.z = this.angle;
+
+        // Update power meter if charging
+        if (this.isCharging) {
+            const powerSpeed = 0.5; // Speed of power increase/decrease
+            const powerDelta = powerSpeed * delta;
+            
+            if (this.powerIncreasing) {
+                this.currentPower = Math.min(1, this.currentPower + powerDelta);
+                if (this.currentPower >= 1) this.powerIncreasing = false;
+            } else {
+                this.currentPower = Math.max(0, this.currentPower - powerDelta);
+                if (this.currentPower <= 0) this.powerIncreasing = true;
+            }
         }
     }
-    
-    reset() {
-        this.score = 0;
-        this.discsThrown = 0;
-        this.discs.forEach(disc => disc.reset());
+
+    startCharging() {
+        this.isCharging = true;
+        this.currentPower = 0;
+        this.powerIncreasing = true;
     }
-    
+
+    shoot() {
+        this.isCharging = false;
+        const power = this.currentPower;
+        this.currentPower = 0;
+        return power;
+    }
+
+    move(direction, delta) {
+        const moveSpeed = 3 * delta;
+        this.position.x = clamp(
+            this.position.x + (direction * moveSpeed),
+            -0.8, // Keep player within board bounds
+            0.8
+        );
+    }
+
+    rotate(direction, delta) {
+        const rotationSpeed = 1.5 * delta;
+        this.angle = clamp(
+            this.angle + (direction * rotationSpeed),
+            -Math.PI / 4, // -45 degrees
+            Math.PI / 4   // 45 degrees
+        );
+    }
+
+    addDisc(disc) {
+        if (this.discs.length < this.maxDiscs) {
+            this.discs.push(disc);
+            return true;
+        }
+        return false;
+    }
+
     hasDiscsLeft() {
-        return this.discsThrown < this.maxDiscs;
+        return this.discs.some(disc => !disc.scored);
     }
-    
+
     getNextDisc() {
-        if (this.discsThrown >= this.maxDiscs) return null;
-        return this.discs[this.discsThrown];
+        return this.discs.find(disc => !disc.scored);
     }
-    
-    throwDisc(power, angle) {
-        if (this.discsThrown >= this.maxDiscs) return false;
-        
-        const disc = this.discs[this.discsThrown];
-        if (!disc) return false;
-        
-        // Position the disc at the starting position
-        const startX = 0; // Center of the board
-        const startY = 0.1;
-        const startZ = -14; // Near the player's end
-        
-        disc.setPosition(startX, startY, startZ);
-        
-        // Calculate force direction based on angle
-        const forceX = Math.sin(angle) * power * 0.1;
-        const forceZ = -Math.cos(angle) * power * 0.1;
-        
-        // Apply force to the disc
-        disc.applyForce(new CANNON.Vec3(forceX, 0, forceZ));
-        
-        this.discsThrown++;
-        return true;
-    }
-    
-    update() {
-        this.discs.forEach(disc => disc.update());
-    }
-    
-    // AI will be implemented in a separate file later
-    makeAIMove() {
-        // Simple AI logic - will be enhanced with neural network later
-        if (!this.isAI || this.discsThrown >= this.maxDiscs) return;
-        
-        // Random power between 0.5 and 1.0
-        const power = 0.5 + Math.random() * 0.5;
-        
-        // Slight random angle (slightly to the left or right)
-        const angle = (Math.random() - 0.5) * 0.2; // Small angle variation
-        
-        // Add a small delay to simulate thinking
-        setTimeout(() => {
-            this.throwDisc(power, angle);
-        }, 1000);
-    }
-    
-    // Calculate score for this player's discs
-    calculateScore(board) {
-        let roundScore = 0;
-        
-        this.discs.forEach(disc => {
-            if (!disc.hasBeenScored) {
-                const discPos = disc.body.position;
-                const score = board.calculateScore(discPos.z);
-                roundScore += score;
-                disc.hasBeenScored = true;
-            }
-        });
-        
-        this.score += roundScore;
-        return roundScore;
-    }
-    
-    // Check if any of the player's discs are still moving
-    hasMovingDiscs() {
-        return this.discs.some(disc => disc.isMoving());
-    }
-    
-    // Clean up resources
-    dispose() {
-        this.discs.forEach(disc => disc.remove());
-        this.discs = [];
+
+    updateScore(points) {
+        this.score += points;
+        return this.score;
     }
 }
 
