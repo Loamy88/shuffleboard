@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import * as CANNON from 'cannon-es';
-import { Board } from './board.js';
-import { Player } from './player.js';
-import { CameraController } from './cameraController.js';
-import { InputHandler } from './inputHandler.js';
-import { UIManager } from './uiManager.js';
+import Board from './board.js';
+import Player from './player.js';
+import CameraController from './cameraController.js';
+import InputHandler from './inputHandler.js';
+import UIManager from './uiManager.js';
 import { clamp, randomInt, lerp } from './utils.js';
 
 class ShuffleboardGame {
@@ -717,3 +717,4 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
