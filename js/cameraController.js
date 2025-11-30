@@ -100,6 +100,39 @@ class CameraController {
         }
     }
 
+    /**
+     * Resets the camera to its default position based on the current mode
+     */
+    resetCamera() {
+        switch (this.currentMode) {
+            case 'follow':
+                // Position camera behind and above the target
+                this.camera.position.set(
+                    this.target.x,
+                    this.target.y + this.followHeight,
+                    this.target.z + this.followDistance
+                );
+                this.camera.lookAt(this.target);
+                break;
+                
+            case 'orbit':
+                // Center on target
+                this.camera.position.set(0, 5, 10);
+                if (this.orbitControls) {
+                    this.orbitControls.target.copy(this.target);
+                    this.orbitControls.update();
+                }
+                break;
+                
+            case 'free':
+            default:
+                // Default free camera position
+                this.camera.position.set(0, 5, 10);
+                this.camera.lookAt(0, 0, 0);
+                break;
+        }
+    }
+
     resize(width, height) {
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
