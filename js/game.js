@@ -106,8 +106,7 @@ class ShuffleboardGame {
             // Set up lighting
             this.setupLights();
             
-            // Initialize input handler
-            this.input.init(this);
+            // Input handler is already initialized in the constructor
             
             // Set up players
             this.ui.updateLoadingText('Setting up players...');
