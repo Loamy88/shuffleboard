@@ -44,4 +44,3 @@ export function createMaterial(color, options = {}) {
     };
     return new THREE.MeshStandardMaterial({ ...defaults, ...options });
 }
-

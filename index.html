@@ -3,34 +3,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Shuffleboard Game</title>
+    <title>3D Shuffleboard</title>
     <link rel="stylesheet" href="css/style.css">
-    <link rel="shortcut icon" type="image/x-icon" href="/shuffleboard/favicon.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
     <script type="importmap">
     {
         "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.132.2/examples/jsm/",
+            "three": "https://unpkg.com/three@0.132.2/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.132.2/examples/jsm/",
             "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
         }
     }
     </script>
 </head>
 <body>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loading-text">Loading...</div>
+    </div>
+
+    <!-- Game Container -->
     <div id="game-container">
-        <div id="ui">
-            <div id="score">
-                <div>Player 1: <span id="player1-score">0</span></div>
-                <div>Player 2: <span id="player2-score">0</span></div>
+        <!-- Game will be rendered here by Three.js -->
+    </div>
+
+    <!-- Main Menu -->
+    <div id="main-menu" class="menu">
+        <h1>3D Shuffleboard</h1>
+        <button id="start-game">Start Game</button>
+        <button id="how-to-play">How to Play</button>
+        <button id="settings">Settings</button>
+    </div>
+
+    <!-- Game UI -->
+    <div id="game-ui">
+        <div id="score-display">
+            <span class="player-score">Player 1: <span id="player1-score">0</span></span>
+            <span class="vs">vs</span>
+            <span class="player-score">Player 2: <span id="player2-score">0</span></span>
+        </div>
+        <div id="turn-indicator">Player 1's Turn</div>
+        <div id="power-meter">
+            <div id="power-bar"></div>
+        </div>
+        <div id="message"></div>
+        <button id="menu-button">Menu</button>
+    </div>
+
+    <!-- How to Play Modal -->
+    <div id="how-to-play-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>How to Play</h2>
+            <div class="instructions">
+                <h3>Objective</h3>
+                <p>Score points by sliding discs into the scoring zones at the opposite end of the board.</p>
+                
+                <h3>Controls</h3>
+                <ul>
+                    <li><strong>WASD/Arrow Keys:</strong> Move camera</li>
+                    <li><strong>Mouse:</strong> Look around</li>
+                    <li><strong>Left Click & Hold:</strong> Charge shot</li>
+                    <li><strong>Release Left Click:</strong> Shoot disc</li>
+                    <li><strong>ESC:</strong> Toggle menu</li>
+                </ul>
+                
+                <h3>Scoring</h3>
+                <ul>
+                    <li><span class="score-zone" style="background-color: #ffff00;"></span> Yellow Zone: 10 points</li>
+                    <li><span class="score-zone" style="background-color: #0000ff;"></span> Blue Zone: 8 points</li>
+                    <li><span class="score-zone" style="background-color: #00ff00;"></span> Green Zone: 7 points</li>
+                    <li><span class="score-zone" style="background-color: #ff0000;"></span> Red Zone: -10 points</li>
+                </ul>
+                
+                <p>First player to reach 75 points wins!</p>
             </div>
-            <div id="turn-indicator">Player 1's Turn</div>
-            <div id="power-meter">
-                <div id="power-bar"></div>
-            </div>
-            <div id="message"></div>
         </div>
     </div>
-    
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Settings</h2>
+            <div class="settings-group">
+                <h3>Graphics</h3>
+                <div class="setting">
+                    <label for="graphics-quality">Quality:</label>
+                    <select id="graphics-quality">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                <div class="setting">
+                    <label for="shadows">Shadows:</label>
+                    <input type="checkbox" id="shadows" checked>
+                </div>
+            </div>
+            <div class="settings-group">
+                <h3>Audio</h3>
+                <div class="setting">
+                    <label for="master-volume">Master Volume:</label>
+                    <input type="range" id="master-volume" min="0" max="100" value="70">
+                </div>
+                <div class="setting">
+                    <label for="music-volume">Music Volume:</label>
+                    <input type="range" id="music-volume" min="0" max="100" value="50">
+                </div>
+                <div class="setting">
+                    <label for="sfx-volume">SFX Volume:</label>
+                    <input type="range" id="sfx-volume" min="0" max="100" value="80">
+                </div>
+            </div>
+            <div class="settings-buttons">
+                <button id="save-settings">Save</button>
+                <button id="reset-settings">Reset to Defaults</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="game-over-modal" class="modal">
+        <div class="modal-content">
+            <h2>Game Over</h2>
+            <div id="winner-message">Player 1 wins!</div>
+            <div id="final-scores"></div>
+            <div class="modal-buttons">
+                <button id="play-again">Play Again</button>
+                <button id="main-menu-btn">Main Menu</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="js/game.js"></script>
 </body>
 </html>
