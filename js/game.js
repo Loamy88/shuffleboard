@@ -88,10 +88,11 @@ class ShuffleboardGame {
             this.ui.init(this);
             this.ui.updateLoadingText('Initializing game...');
             
-            // Set up scene
-            this.setupScene();
-            this.ui.updateLoadingText('Setting up physics...');
+            // Set up scene (this will also set up the camera)
+            this.ui.updateLoadingText('Setting up scene...');
+            await this.setupScene();
             
+            this.ui.updateLoadingText('Setting up physics...');
             // Set up physics
             this.setupPhysics();
             
@@ -101,10 +102,6 @@ class ShuffleboardGame {
             // Create game board
             this.ui.updateLoadingText('Creating game board...');
             this.board = new Board(this.scene, this.world);
-            
-            // Set up camera and controls
-            this.ui.updateLoadingText('Setting up camera...');
-            this.setupCamera();
             
             // Set up lighting
             this.setupLights();
@@ -136,24 +133,20 @@ class ShuffleboardGame {
             
         } catch (error) {
             console.error('Error initializing game:', error);
-            this.ui.showError('Error loading game. Please refresh the page.');
+            this.ui.showError('Error loading game: ' + error.message);
         }
     }
 
     setupScene() {
         // Create scene
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x121212); // Dark background
-        this.scene.fog = new THREE.Fog(0x121212, 5, 20);
+        this.scene.background = new THREE.Color(0x87CEEB); // Sky blue background
         
-        // Create renderer with settings from config
-        const { antialias, pixelRatio } = this.settings.graphics;
-        this.renderer = new THREE.WebGLRenderer({ 
-            antialias,
-            alpha: true,
-            powerPreference: 'high-performance'
+        // Create renderer
+        this.renderer = new THREE.WebGLRenderer({
+            antialias: this.settings.graphics.antialias,
+            alpha: true
         });
-        
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.shadowMap.enabled = this.settings.graphics.shadows;
@@ -163,23 +156,48 @@ class ShuffleboardGame {
         
         // Add renderer to container
         const container = document.getElementById('game-container');
+        if (!container) {
+            throw new Error('Game container element not found');
+        }
         container.appendChild(this.renderer.domElement);
         
-        // Handle window resize
-        window.addEventListener('resize', () => this.onWindowResize(), false);
+        // Make sure the DOM is updated before proceeding
+        return new Promise(resolve => {
+            requestAnimationFrame(() => {
+                // Setup camera after renderer is in the DOM
+                this.setupCamera();
+                
+                // Handle window resize
+                window.addEventListener('resize', () => this.onWindowResize(), false);
+                
+                // Add stats for performance monitoring (optional)
+                try {
+                    this.stats = new Stats.default();
+                    this.stats.domElement.style.position = 'absolute';
+                    this.stats.domElement.style.top = '10px';
+                    this.stats.domElement.style.left = '10px';
+                    this.stats.domElement.style.display = 'none'; // Hidden by default
+                    container.appendChild(this.stats.domElement);
+                } catch (e) {
+                    console.warn('Could not initialize Stats:', e);
+                    this.stats = null;
+                }
+                
+                resolve();
+            });
+        });
+    }
+
+    setupCamera() {
+        // Create camera with aspect ratio based on window size
+        const aspect = window.innerWidth / window.innerHeight;
+        this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
         
-        // Add stats for performance monitoring (optional)
-        try {
-            this.stats = new Stats();
-            this.stats.domElement.style.position = 'absolute';
-            this.stats.domElement.style.top = '10px';
-            this.stats.domElement.style.left = '10px';
-            this.stats.domElement.style.display = 'none'; // Hidden by default
-            container.appendChild(this.stats.domElement);
-        } catch (e) {
-            console.warn('Could not initialize Stats:', e);
-            this.stats = null;
-        }
+        // Initialize camera controller
+        this.cameraController = new CameraController(this.camera, this.renderer.domElement);
+        
+        // Set initial camera position based on game mode
+        this.resetCamera();
     }
 
     setupPhysics() {
@@ -245,6 +263,11 @@ class ShuffleboardGame {
         // Create camera with aspect ratio based on window size
         const aspect = window.innerWidth / window.innerHeight;
         this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
+        
+        // Make sure renderer.domElement is available
+        if (!this.renderer || !this.renderer.domElement) {
+            throw new Error('Renderer or renderer.domElement not available');
+        }
         
         // Initialize camera controller
         this.cameraController = new CameraController(this.camera, this.renderer.domElement);
@@ -717,4 +740,3 @@ window.addEventListener('load', () => {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = ShuffleboardGame;
 }
-
