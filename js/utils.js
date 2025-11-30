@@ -2,7 +2,7 @@ import * as THREE from 'three';
 // Utility functions for the game
 
 // Generate a random number between min and max
-export function randomInRange(min, max) {
+export function randomInt(min, max) {
     return Math.random() * (max - min) + min;
 }
 
@@ -44,3 +44,4 @@ export function createMaterial(color, options = {}) {
     };
     return new THREE.MeshStandardMaterial({ ...defaults, ...options });
 }
+
