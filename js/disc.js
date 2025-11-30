@@ -19,7 +19,7 @@ class Disc {
             this.height, 
             32
         );
-        const material = Utils.createMaterial(color, {
+        const material = createMaterial(color, {
             metalness: 0.8,
             roughness: 0.2
         });
@@ -77,5 +77,4 @@ class Disc {
 }
 
 export default Disc;
-
 
