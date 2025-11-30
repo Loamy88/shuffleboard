@@ -1,6 +1,7 @@
 class UIManager {
     constructor() {
         // Cache DOM elements
+        this.game = null;
         this.elements = {
             loadingOverlay: document.getElementById('loading-overlay'),
             loadingProgress: document.getElementById('loading-progress'),
@@ -49,6 +50,33 @@ class UIManager {
         
         // Bind event listeners
         this.bindEvents();
+    }
+
+    init(game) {
+        this.game = game;
+        this.bindEvents();
+        this.updateLoadingProgress(0, 'Loading...');
+    }
+
+    showError(message) {
+        this.showMessage('Error', message, 'OK', () => {
+            window.location.reload();
+        });
+    }
+
+    updateLoadingText(text) {
+        if (this.elements.loadingText) {
+            this.elements.loadingText.textContent = text;
+        }
+    }
+
+    hideLoadingScreen() {
+        if (this.elements.loadingOverlay) {
+            this.elements.loadingOverlay.style.opacity = '0';
+            setTimeout(() => {
+                this.elements.loadingOverlay.style.display = 'none';
+            }, 500);
+        }
     }
 
     bindEvents() {

@@ -686,6 +686,7 @@ class ShuffleboardGame {
 
 // Start the game when the page loads
 window.addEventListener('load', () => {
+    // Remove any Detector code if present
     const game = new ShuffleboardGame();
 });
 
@@ -717,4 +718,3 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
-
