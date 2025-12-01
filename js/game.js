@@ -95,8 +95,13 @@ class ShuffleboardGame {
             };
             
             // Bind methods that are used as event handlers
-            this.onWindowResize = this.onWindowResize.bind(this);
-            this.animate = this.animate.bind(this);
+            this.onWindowResize = () => {
+                // Handle window resize
+            };
+            
+            this.animate = () => {
+                // Animation loop
+            };
             
             // Initialize the game
             this.init().catch(error => {
@@ -693,7 +698,7 @@ class ShuffleboardGame {
         }
     }
 
-    animate() {
+    animate = () => {
         try {
             // Start stats if available
             if (this.stats) {
@@ -751,7 +756,7 @@ class ShuffleboardGame {
     /**
      * Clean up resources and remove event listeners
      */
-    cleanup() {
+    cleanup = () => {
     try {
         console.log('Cleaning up game resources...');
         
