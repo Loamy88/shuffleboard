@@ -122,7 +122,10 @@ class ShuffleboardGame {
             
             // Initialize UI
             console.log('[DEBUG] Initializing UI...');
-            this.ui.init(this);
+            if (!this.ui) {
+                throw new Error('UI manager not initialized');
+            }
+            await this.ui.init(this);
             this.ui.updateLoadingText('Initializing game...');
             console.log('[DEBUG] UI initialized');
             
@@ -329,12 +332,15 @@ class ShuffleboardGame {
             // Clear any existing players
             this.players = [];
             
+            // Make sure scene has world reference
+            this.scene.userData.world = this.world;
+            
             // Create player 1 (human)
-            const player1 = new Player(0, false); // Player 1 is human
+            const player1 = new Player(this.scene, false); // Pass scene and isAI flag
             this.players.push(player1);
             
             // Create player 2 (AI if enabled, otherwise human)
-            const player2 = new Player(1, this.settings.game.aiEnabled);
+            const player2 = new Player(this.scene, this.settings.game.aiEnabled);
             this.players.push(player2);
             
             // Set current player to player 1
@@ -665,30 +671,55 @@ class ShuffleboardGame {
     }
 
     gameOver(winnerIndex) {
-        this.gameState = 'gameOver';
-        this.stopTurnTimer();
-        
-        // Show game over screen
-        this.ui.showGameOver(winnerIndex, this.scores, () => {
-            // Play again callback
-            this.showMainMenu();
-        });
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-        
-        // Update camera
-        this.camera.aspect = width / height;
-        this.camera.updateProjectionMatrix();
-        
-        // Update renderer
-        this.renderer.setSize(width, height);
-        this.renderer.setPixelRatio(this.settings.graphics.pixelRatio);
-        
-        // Update UI if available
-        if (this.ui && typeof this.ui.onWindowResize === 'function') {
-            this.ui.onWindowResize(width, height);
-        } else if (this.debug.enabled) {
-            console.debug('UI manager not available or missing onWindowResize method');
+        try {
+            if (this.gameState === 'gameOver') return;
+            
+            this.gameState = 'gameOver';
+            this.stopTurnTimer();
+            
+            // Show game over screen if UI is available
+            if (this.ui && typeof this.ui.showGameOver === 'function') {
+                this.ui.showGameOver(winnerIndex, this.scores, () => {
+                    // Play again callback
+                    if (typeof this.showMainMenu === 'function') {
+                        this.showMainMenu();
+                    }
+                });
+            }
+            
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            
+            // Update camera if available
+            if (this.camera) {
+                this.camera.aspect = width / height;
+                this.camera.updateProjectionMatrix();
+            }
+            
+            // Update renderer if available
+            if (this.renderer) {
+                this.renderer.setSize(width, height);
+                if (this.settings?.graphics?.pixelRatio) {
+                    this.renderer.setPixelRatio(this.settings.graphics.pixelRatio);
+                }
+            }
+            
+            // Update UI if available
+            if (this.ui) {
+                if (typeof this.ui.onWindowResize === 'function') {
+                    this.ui.onWindowResize(width, height);
+                } else if (this.debug?.enabled) {
+                    console.debug('UI manager missing onWindowResize method');
+                }
+            } else if (this.debug?.enabled) {
+                console.debug('UI manager not available');
+            }
+        } catch (error) {
+            console.error('Error in gameOver:', error);
+            // Try to show error in UI if possible
+            if (this.ui?.showError) {
+                this.ui.showError('Error in game over sequence: ' + (error.message || 'Unknown error'));
+            }
         }
         
         if (this.debug.enabled) {
@@ -755,108 +786,218 @@ class ShuffleboardGame {
      * Clean up resources and remove event listeners
      */
     cleanup = () => {
-    try {
-        console.log('Cleaning up game resources...');
-        
-        // Stop the animation loop
-        if (this.animationFrameId) {
-            cancelAnimationFrame(this.animationFrameId);
-            this.animationFrameId = null;
-        }
-        
-        // Remove event listeners
-        window.removeEventListener('resize', this.onWindowResize);
-        
-        // Clean up Three.js resources
-        if (this.scene) {
-            // Dispose of geometries, materials, and textures
-            this.scene.traverse(object => {
-                if (object.geometry) {
-                    object.geometry.dispose();
+        try {
+            console.log('Cleaning up game resources...');
+            
+            // Stop the animation loop
+            if (this.animationFrameId) {
+                try {
+                    cancelAnimationFrame(this.animationFrameId);
+                } catch (e) {
+                    console.warn('Error canceling animation frame:', e);
                 }
-                
-                if (object.material) {
-                    if (Array.isArray(object.material)) {
-                        object.material.forEach(material => {
-                            if (material.map) material.map.dispose();
-                            if (material.lightMap) material.lightMap.dispose();
-                            if (material.bumpMap) material.bumpMap.dispose();
-                            if (material.normalMap) material.normalMap.dispose();
-                            if (material.specularMap) material.specularMap.dispose();
-                            if (material.envMap) material.envMap.dispose();
-                            material.dispose();
-                        });
-                    } else {
-                        const material = object.material;
-                        if (material.map) material.map.dispose();
-                        if (material.lightMap) material.lightMap.dispose();
-                        if (material.bumpMap) material.bumpMap.dispose();
-                        if (material.normalMap) material.normalMap.dispose();
-                        if (material.specularMap) material.specularMap.dispose();
-                        if (material.envMap) material.envMap.dispose();
-                        material.dispose();
+                this.animationFrameId = null;
+            }
+            
+            // Remove event listeners safely
+            try {
+                window.removeEventListener('resize', this.onWindowResize);
+            } catch (e) {
+                console.warn('Error removing resize event listener:', e);
+            }
+            
+            // Clean up Three.js resources
+            if (this.scene) {
+                try {
+                    // Dispose of geometries, materials, and textures
+                    this.scene.traverse(object => {
+                        try {
+                            if (object?.geometry) {
+                                try {
+                                    object.geometry.dispose();
+                                } catch (e) {
+                                    console.warn('Error disposing geometry:', e);
+                                }
+                            }
+                            
+                            if (object?.material) {
+                                try {
+                                    if (Array.isArray(object.material)) {
+                                        object.material.forEach(material => this.disposeMaterial(material));
+                                    } else {
+                                        this.disposeMaterial(object.material);
+                                    }
+                                } catch (e) {
+                                    console.warn('Error disposing material:', e);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Error traversing scene object:', e);
+                        }
+                    });
+                    
+                    // Clear the scene
+                    while (this.scene.children?.length > 0) {
+                        try {
+                            this.scene.remove(this.scene.children[0]);
+                        } catch (e) {
+                            console.warn('Error removing scene child:', e);
+                            break; // Prevent infinite loop
+                        }
                     }
+                } catch (e) {
+                    console.error('Error cleaning up scene:', e);
+                } finally {
+                    this.scene = null;
+                }
+            }
+            
+            // Clean up physics world
+            if (this.world?.bodies) {
+                try {
+                    // Remove all bodies safely
+                    while (this.world.bodies.length > 0) {
+                        try {
+                            this.world.removeBody(this.world.bodies[0]);
+                        } catch (e) {
+                            console.warn('Error removing physics body:', e);
+                            break; // Prevent infinite loop
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error cleaning up physics world:', e);
+                } finally {
+                    this.world = null;
+                }
+            }
+            
+            // Clean up renderer
+            if (this.renderer) {
+                try {
+                    if (typeof this.renderer.dispose === 'function') {
+                        this.renderer.dispose();
+                    }
+                    
+                    if (typeof this.renderer.forceContextLoss === 'function') {
+                        try {
+                            const gl = this.renderer.getContext();
+                            if (gl && typeof gl.getExtension === 'function') {
+                                const loseContext = gl.getExtension('WEBGL_lose_context');
+                                if (loseContext) {
+                                    loseContext.loseContext();
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Error forcing WebGL context loss:', e);
+                        }
+                    }
+                    
+                    if (this.renderer.domElement?.parentNode) {
+                        try {
+                            this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+                        } catch (e) {
+                            console.warn('Error removing renderer DOM element:', e);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error cleaning up renderer:', e);
+                } finally {
+                    this.renderer = null;
+                }
+            }
+            
+            // Clean up camera controller
+            if (this.cameraController) {
+                try {
+                    if (typeof this.cameraController.dispose === 'function') {
+                        this.cameraController.dispose();
+                    }
+                } catch (e) {
+                    console.error('Error cleaning up camera controller:', e);
+                } finally {
+                    this.cameraController = null;
+                }
+            }
+            
+            // Clean up UI
+            if (this.ui) {
+                try {
+                    if (typeof this.ui.cleanup === 'function') {
+                        this.ui.cleanup();
+                    }
+                } catch (e) {
+                    console.error('Error cleaning up UI:', e);
+                }
+            }
+            
+            // Clean up input
+            if (this.input) {
+                try {
+                    if (typeof this.input.cleanup === 'function') {
+                        this.input.cleanup();
+                    }
+                } catch (e) {
+                    console.error('Error cleaning up input:', e);
+                }
+            }
+            
+            // Clean up stats
+            if (this.stats) {
+                try {
+                    const statsElement = this.stats.dom;
+                    if (statsElement?.parentNode) {
+                        statsElement.parentNode.removeChild(statsElement);
+                    }
+                } catch (e) {
+                    console.warn('Error removing stats element:', e);
+                } finally {
+                    this.stats = null;
+                }
+            }
+            
+            console.log('Game cleanup completed');
+        } catch (error) {
+            console.error('Error during cleanup:', error);
+        }
+    }
+    
+    /**
+     * Helper method to safely dispose of a material and its textures
+     * @param {THREE.Material} material - The material to dispose
+     */
+    disposeMaterial(material) {
+        if (!material) return;
+        
+        try {
+            // Dispose of textures
+            const textureProps = [
+                'map', 'lightMap', 'bumpMap', 'normalMap', 'specularMap', 
+                'envMap', 'alphaMap', 'aoMap', 'displacementMap', 'emissiveMap',
+                'metalnessMap', 'roughnessMap', 'clearcoatMap', 'clearcoatNormalMap',
+                'clearcoatRoughnessMap', 'sheenColorMap', 'sheenRoughnessMap',
+                'transmissionMap', 'thicknessMap', 'specularIntensityMap',
+                'specularColorMap', 'iridescenceMap', 'iridescenceThicknessMap'
+            ];
+            
+            textureProps.forEach(prop => {
+                try {
+                    const texture = material[prop];
+                    if (texture && typeof texture.dispose === 'function') {
+                        texture.dispose();
+                    }
+                } catch (e) {
+                    console.warn(`Error disposing ${prop}:`, e);
                 }
             });
             
-            // Clear the scene
-            while (this.scene.children.length > 0) {
-                this.scene.remove(this.scene.children[0]);
+            // Dispose of material
+            if (typeof material.dispose === 'function') {
+                material.dispose();
             }
-            this.scene = null;
+        } catch (e) {
+            console.warn('Error in disposeMaterial:', e);
         }
-        
-        // Clean up physics world
-        if (this.world) {
-            // Remove all bodies
-            while (this.world.bodies.length > 0) {
-                this.world.removeBody(this.world.bodies[0]);
-            }
-            this.world = null;
-        }
-        
-        // Clean up renderer
-        if (this.renderer) {
-            this.renderer.dispose();
-            this.renderer.forceContextLoss();
-            if (this.renderer.domElement && this.renderer.domElement.parentNode) {
-                this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
-            }
-            this.renderer = null;
-        }
-        
-        // Clean up camera controller
-        if (this.cameraController) {
-            if (typeof this.cameraController.dispose === 'function') {
-                this.cameraController.dispose();
-            }
-            this.cameraController = null;
-        }
-        
-        // Clean up UI
-        if (this.ui && typeof this.ui.cleanup === 'function') {
-            this.ui.cleanup();
-        }
-        
-        // Clean up input
-        if (this.input && typeof this.input.cleanup === 'function') {
-            this.input.cleanup();
-        }
-        
-        // Clean up stats
-        if (this.stats) {
-            const statsElement = this.stats.dom;
-            if (statsElement && statsElement.parentNode) {
-                statsElement.parentNode.removeChild(statsElement);
-            }
-            this.stats = null;
-        }
-        
-        console.log('Game cleanup completed');
-    } catch (error) {
-        console.error('Error during cleanup:', error);
     }
-}
 
 }
 

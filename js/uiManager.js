@@ -53,25 +53,67 @@ class UIManager {
     }
 
     init(game) {
-        this.game = game;
-        this.bindEvents();
-        this.updateLoadingProgress(0, 'Loading...');
+        try {
+            if (!game) {
+                throw new Error('Game instance is required');
+            }
+            this.game = game;
+            this.bindEvents();
+            this.updateLoadingProgress(0, 'Loading...');
+            return Promise.resolve();
+        } catch (error) {
+            console.error('Error initializing UIManager:', error);
+            return Promise.reject(error);
+        }
     }
 
-    showError(message) {
-        console.error('UI Error:', message);
+    showError(message, title = 'Error', onClose = null) {
         try {
-            if (this.elements.messageBox?.container) {
-                this.showMessage('Error', message, 'OK', () => {
-                    window.location.reload();
-                });
+            console.error(`${title}:`, message);
+            
+            // Ensure message is a string
+            const errorMessage = typeof message === 'string' ? message : 
+                               message?.message || 'An unknown error occurred';
+            
+            // Try to use the message box if available
+            if (this.elements?.messageBox?.container) {
+                this.showMessage(
+                    title,
+                    errorMessage,
+                    'OK',
+                    () => {
+                        try {
+                            if (typeof onClose === 'function') {
+                                onClose();
+                            } else {
+                                window.location.reload();
+                            }
+                        } catch (e) {
+                            console.error('Error in error handler callback:', e);
+                            window.location.reload();
+                        }
+                    }
+                );
             } else {
-                // Fallback if UI isn't ready
-                alert('Error: ' + message);
+                // Fallback to alert if UI isn't ready
+                alert(`${title}: ${errorMessage}`);
+                if (typeof onClose === 'function') {
+                    try {
+                        onClose();
+                    } catch (e) {
+                        console.error('Error in error handler callback (fallback):', e);
+                    }
+                }
             }
         } catch (error) {
-            console.error('Error showing error message:', error);
-            alert('Error: ' + message);
+            // Last resort error handling
+            console.error('Critical error in showError:', error);
+            try {
+                alert(`A critical error occurred: ${error.message || 'Unknown error'}`);
+            } catch (e) {
+                // If even alert fails, log to console
+                console.error('Could not show error to user:', e);
+            }
         }
     }
 
@@ -82,21 +124,55 @@ class UIManager {
     }
 
     hideLoadingScreen() {
-        console.log('Hiding loading screen...');
-        const loadingOverlay = this.elements.loadingOverlay || document.getElementById('loading-overlay');
-        if (loadingOverlay) {
-            loadingOverlay.style.opacity = '0';
-            setTimeout(() => {
-                loadingOverlay.style.display = 'none';
-                console.log('Loading screen hidden');
-            }, 300);
-        } else {
-            console.warn('Loading overlay element not found');
-            // Try direct DOM access as fallback
-            const directAccess = document.getElementById('loading-overlay');
-            if (directAccess) {
-                directAccess.style.display = 'none';
-                console.log('Loading screen hidden (fallback)');
+        try {
+            console.log('Hiding loading screen...');
+            
+            // First try to get the loading overlay from cached elements
+            let loadingOverlay = this.elements?.loadingOverlay;
+            
+            // If not found in cache, try direct DOM access
+            if (!loadingOverlay || !(loadingOverlay instanceof HTMLElement)) {
+                console.warn('Loading overlay not found in cache, trying direct DOM access');
+                loadingOverlay = document.getElementById('loading-overlay');
+            }
+            
+            if (loadingOverlay instanceof HTMLElement) {
+                // Use requestAnimationFrame for smoother animations
+                requestAnimationFrame(() => {
+                    try {
+                        loadingOverlay.style.opacity = '0';
+                        loadingOverlay.style.transition = 'opacity 0.3s ease-out';
+                        
+                        // Remove from DOM after fade out
+                        setTimeout(() => {
+                            try {
+                                loadingOverlay.style.display = 'none';
+                                console.log('Loading screen hidden');
+                                
+                                // Clean up event listeners
+                                this.off('loadingComplete');
+                            } catch (e) {
+                                console.error('Error in loading screen hide timeout:', e);
+                            }
+                        }, 300);
+                    } catch (e) {
+                        console.error('Error animating loading screen:', e);
+                        loadingOverlay.style.display = 'none';
+                    }
+                });
+            } else {
+                console.warn('Loading overlay element not found in DOM');
+            }
+        } catch (error) {
+            console.error('Error in hideLoadingScreen:', error);
+            // Last resort: try to hide any loading overlay by ID
+            try {
+                const directAccess = document.getElementById('loading-overlay');
+                if (directAccess) {
+                    directAccess.style.display = 'none';
+                }
+            } catch (e) {
+                console.error('Critical error in hideLoadingScreen fallback:', e);
             }
         }
     }
@@ -104,52 +180,128 @@ class UIManager {
     bindEvents() {
         try {
             // Menu buttons
-            if (this.elements.startButton) {
-                this.elements.startButton.addEventListener('click', () => this.emit('startGame'));
-            }
-            if (this.elements.howToPlayButton) {
-                this.elements.howToPlayButton.addEventListener('click', () => this.showModal('howToPlay'));
-            }
-            if (this.elements.settingsButton) {
-                this.elements.settingsButton.addEventListener('click', () => this.showModal('settings'));
-            }
-            if (this.elements.menuButton) {
-                this.elements.menuButton.addEventListener('click', () => this.toggleMenu());
-            }
-        
+            this.safeAddEventListener(this.elements.startButton, 'click', () => this.emit('startGame'));
+            this.safeAddEventListener(this.elements.howToPlayButton, 'click', () => this.showModal('howToPlay'));
+            this.safeAddEventListener(this.elements.settingsButton, 'click', () => this.showModal('settings'));
+            this.safeAddEventListener(this.elements.menuButton, 'click', () => this.toggleMenu());
+            
+            // Game over buttons
+            this.safeAddEventListener(this.elements.playAgainButton, 'click', () => this.emit('playAgain'));
+            this.safeAddEventListener(this.elements.mainMenuButton, 'click', () => this.showScreen('menu'));
+            
+            // Settings
+            this.safeAddEventListener(this.elements.volumeSlider, 'input', (e) => {
+                this.emit('volumeChange', parseFloat(e.target.value));
+            });
+            
+            this.safeAddEventListener(this.elements.graphicsQuality, 'change', (e) => {
+                this.emit('graphicsQualityChange', e.target.value);
+            });
+            
+            this.safeAddEventListener(this.elements.enableShadows, 'change', (e) => {
+                this.emit('shadowsToggle', e.target.checked);
+            });
+            
+            // Modal close buttons - use event delegation for dynamic elements
+            document.body.addEventListener('click', (e) => {
+                try {
+                    const closeButton = e.target.closest('.modal-close');
+                    if (closeButton) {
+                        this.hideModal();
+                    }
+                } catch (error) {
+                    console.error('Error handling modal close:', error);
+                }
+            });
+            
         } catch (error) {
-            console.error('Error binding UI events:', error);
+            console.error('Error in bindEvents:', error);
+            this.showError('Failed to initialize UI controls. Some features may not work.', 'UI Error');
         }
-
-        // Modal close buttons
-        document.querySelectorAll('.modal-close').forEach(button => {
-            button.addEventListener('click', () => this.hideModal());
-        });
-        
-        // Game over buttons
-        this.elements.playAgainButton?.addEventListener('click', () => this.emit('playAgain'));
-        this.elements.mainMenuButton?.addEventListener('click', () => this.showScreen('menu'));
-        
-        // Settings
-        this.elements.volumeSlider?.addEventListener('input', (e) => {
-            this.emit('volumeChange', parseFloat(e.target.value));
-        });
-        
-        this.elements.graphicsQuality?.addEventListener('change', (e) => {
-            this.emit('graphicsQualityChange', e.target.value);
-        });
-        
-        this.elements.enableShadows?.addEventListener('change', (e) => {
-            this.emit('shadowsToggle', e.target.checked);
-        });
+    }
+    
+    /**
+     * Safely add an event listener with error handling
+     * @param {HTMLElement} element - The element to add the listener to
+     * @param {string} event - The event name
+     * @param {Function} handler - The event handler
+     * @param {Object} [options] - Event listener options
+     */
+    safeAddEventListener(element, event, handler, options) {
+        try {
+            if (element && element.addEventListener) {
+                element.addEventListener(event, handler, options);
+                
+                // Store reference for later cleanup
+                this._eventListeners = this._eventListeners || [];
+                this._eventListeners.push({ element, event, handler, options });
+                
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error(`Error adding ${event} listener:`, error);
+            return false;
+        }
     }
 
-    // Event system
-    on(event, callback) {
-        this._callbacks = this._callbacks || {};
-        this._callbacks[event] = this._callbacks[event] || [];
-        this._callbacks[event].push(callback);
-        return this;
+    /**
+     * Clean up all resources and event listeners
+     */
+    cleanup() {
+        try {
+            console.log('Cleaning up UI Manager...');
+            
+            // Remove all event listeners
+            if (Array.isArray(this._eventListeners)) {
+                this._eventListeners.forEach(({ element, event, handler, options }) => {
+                    try {
+                        if (element && typeof element.removeEventListener === 'function') {
+                            element.removeEventListener(event, handler, options);
+                        }
+                    } catch (e) {
+                        console.warn(`Error removing ${event} listener:`, e);
+                    }
+                });
+                this._eventListeners = [];
+            }
+            
+            // Clear any pending timeouts/intervals
+            if (Array.isArray(this._timeouts)) {
+                this._timeouts.forEach(timeout => {
+                    try {
+                        if (timeout) clearTimeout(timeout);
+                    } catch (e) {
+                        console.warn('Error clearing timeout:', e);
+                    }
+                });
+                this._timeouts = [];
+            }
+            
+            // Clear animation frames
+            if (this._animationFrames) {
+                this._animationFrames.forEach(raf => {
+                    try {
+                        if (raf) cancelAnimationFrame(raf);
+                    } catch (e) {
+                        console.warn('Error canceling animation frame:', e);
+                    }
+                });
+                this._animationFrames = [];
+            }
+            
+            // Clear callbacks
+            this._callbacks = {};
+
+            // Reset UI state
+            this.currentScreen = 'loading';
+            this.isMenuOpen = false;
+            this.isModalOpen = false;
+
+            console.log('UI Manager cleanup completed');
+        } catch (error) {
+            console.error('Error during UI Manager cleanup:', error);
+        }
     }
 
     off(event, callback) {
