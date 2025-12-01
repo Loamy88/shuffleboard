@@ -107,55 +107,74 @@ class ShuffleboardGame {
 
     async init() {
         try {
+            console.log('Initializing game...');
+            
             // Initialize UI
+            console.log('Initializing UI...');
             this.ui.init(this);
             this.ui.updateLoadingText('Initializing game...');
             
             // Set up scene (this will also set up the camera)
+            console.log('Setting up scene...');
             this.ui.updateLoadingText('Setting up scene...');
-            await this.setupScene();
+            try {
+                await this.setupScene();
+                console.log('Scene setup complete');
+            } catch (error) {
+                console.error('Error in setupScene:', error);
+                throw error;
+            }
             
+            console.log('Setting up physics...');
             this.ui.updateLoadingText('Setting up physics...');
-            // Set up physics
             this.setupPhysics();
             
             // Store world in scene's userData for easy access
             this.scene.userData.world = this.world;
             
-            // Create game board
+            console.log('Creating game board...');
             this.ui.updateLoadingText('Creating game board...');
             this.board = new Board(this.scene, this.world);
             
-            // Set up lighting
+            console.log('Setting up lights...');
+            this.ui.updateLoadingText('Setting up lighting...');
             this.setupLights();
             
-            // Input handler is already initialized in the constructor
-            
-            // Set up players
+            console.log('Setting up players...');
             this.ui.updateLoadingText('Setting up players...');
             this.setupPlayers();
             
-            // Set up event listeners
+            console.log('Setting up event listeners...');
             this.setupEventListeners();
             
-            // Load settings
+            console.log('Loading settings...');
             this.loadSettings();
             
             // Add a small delay to ensure everything is loaded
+            console.log('Finalizing initialization...');
             await new Promise(resolve => setTimeout(resolve, 500));
             
-            // Hide loading screen
+            console.log('Hiding loading screen...');
             this.ui.hideLoadingScreen();
             
-            // Show main menu
+            console.log('Showing main menu...');
             this.showMainMenu();
             
-            // Start game loop
+            console.log('Starting game loop...');
             this.animate();
+            
+            console.log('Game initialization complete');
             
         } catch (error) {
             console.error('Error initializing game:', error);
-            this.ui.showError('Error loading game: ' + error.message);
+            this.ui.showError('Error loading game: ' + (error.message || 'Unknown error'));
+            
+            // Ensure loading screen is hidden even on error
+            try {
+                this.ui.hideLoadingScreen();
+            } catch (e) {
+                console.error('Error hiding loading screen:', e);
+            }
         }
     }
 

@@ -82,11 +82,22 @@ class UIManager {
     }
 
     hideLoadingScreen() {
-        if (this.elements.loadingOverlay) {
-            this.elements.loadingOverlay.style.opacity = '0';
+        console.log('Hiding loading screen...');
+        const loadingOverlay = this.elements.loadingOverlay || document.getElementById('loading-overlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.opacity = '0';
             setTimeout(() => {
-                this.elements.loadingOverlay.style.display = 'none';
-            }, 500);
+                loadingOverlay.style.display = 'none';
+                console.log('Loading screen hidden');
+            }, 300);
+        } else {
+            console.warn('Loading overlay element not found');
+            // Try direct DOM access as fallback
+            const directAccess = document.getElementById('loading-overlay');
+            if (directAccess) {
+                directAccess.style.display = 'none';
+                console.log('Loading screen hidden (fallback)');
+            }
         }
     }
 
