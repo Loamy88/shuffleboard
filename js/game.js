@@ -226,7 +226,11 @@ class ShuffleboardGame {
             await new Promise(resolve => requestAnimationFrame(resolve));
             
             // Setup camera after renderer is in the DOM
-            this.setupCamera();
+            const camera = this.setupCamera();
+            
+            // Initialize camera controller after renderer is ready
+            this.cameraController = new CameraController(camera, this.renderer.domElement);
+            this.cameraController.resetCamera();
             
             // Handle window resize
             window.addEventListener('resize', () => this.onWindowResize(), false);
@@ -255,12 +259,7 @@ class ShuffleboardGame {
             // Create camera with aspect ratio based on window size
             const aspect = window.innerWidth / window.innerHeight;
             this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
-            
-            // Initialize camera controller
-            this.cameraController = new CameraController(this.camera, this.renderer.domElement);
-            
-            // Set initial camera position based on game mode
-            this.cameraController.resetCamera();
+            return this.camera;
         } catch (error) {
             console.error('Error in setupCamera:', error);
             throw error;
