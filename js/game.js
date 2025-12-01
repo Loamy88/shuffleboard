@@ -213,6 +213,90 @@ class ShuffleboardGame {
             this.setupPlayers();
             
             console.log('Setting up event listeners...');
+            this.setupEventListeners = () => {
+                try {
+                    console.log('[DEBUG] Setting up game event listeners...');
+                    
+                    // Window resize handler
+                    window.addEventListener('resize', this.onWindowResize);
+                    
+                    // UI event listeners
+                    if (this.ui) {
+                        // Game controls
+                        this.ui.on('startGame', () => this.startGame());
+                        this.ui.on('pauseGame', () => this.togglePause());
+                        this.ui.on('resumeGame', () => this.resumeGame());
+                        this.ui.on('quitToMenu', () => this.returnToMainMenu());
+                        this.ui.on('restartGame', () => this.restartGame());
+                        
+                        // Settings changes
+                        this.ui.on('volumeChange', (volume) => {
+                            this.settings.audio.masterVolume = volume;
+                            this.applyAudioSettings();
+                        });
+                        
+                        this.ui.on('graphicsQualityChange', (quality) => {
+                            this.settings.graphics.quality = quality;
+                            this.applyGraphicsSettings();
+                        });
+                        
+                        // Player actions
+                        this.ui.on('playerShoot', (power, angle) => {
+                            if (this.getState() === 'playing' && this.currentPlayer) {
+                                this.currentPlayer.shoot(power, angle);
+                            }
+                        });
+                        
+                        // Error handling
+                        this.ui.on('error', (error) => {
+                            console.error('UI Error:', error);
+                            this.showError(error.message || 'An unknown UI error occurred');
+                        });
+                    }
+                    
+                    // Input handling
+                    if (this.input) {
+                        // Keyboard controls
+                        this.input.on('keydown', (key) => this.handleKeyDown(key));
+                        this.input.on('keyup', (key) => this.handleKeyUp(key));
+                        
+                        // Mouse/touch controls
+                        this.input.on('pointerdown', (position) => this.handlePointerDown(position));
+                        this.input.on('pointermove', (position) => this.handlePointerMove(position));
+                        this.input.on('pointerup', (position) => this.handlePointerUp(position));
+                    }
+                    
+                    // Game state change listeners
+                    this.onStateChange((newState, oldState) => {
+                        console.log(`[DEBUG] Game state changed: ${oldState} -> ${newState}`);
+                        
+                        // Update UI based on state changes
+                        if (this.ui) {
+                            switch (newState) {
+                                case 'menu':
+                                    this.ui.showScreen('menu');
+                                    break;
+                                case 'playing':
+                                    this.ui.showScreen('game');
+                                    break;
+                                case 'paused':
+                                    this.ui.showMessage('Game Paused', 'The game is paused', 'Resume', () => this.resumeGame());
+                                    break;
+                                case 'gameOver':
+                                    this.ui.showScreen('gameOver');
+                                    break;
+                            }
+                        }
+                    });
+                    
+                    console.log('[DEBUG] Game event listeners set up successfully');
+                    
+                } catch (error) {
+                    console.error('Error setting up event listeners:', error);
+                    throw error;
+                }
+            };
+            
             this.setupEventListeners();
             
             console.log('Loading settings...');
@@ -480,6 +564,97 @@ class ShuffleboardGame {
             point1: pointLight1,
             point2: pointLight2
         };
+    }
+
+    /**
+     * Loads settings from localStorage and merges them with default settings
+     */
+    loadSettings() {
+        try {
+            console.log('[DEBUG] Loading settings...');
+            
+            // Try to load settings from localStorage
+            const savedSettings = localStorage.getItem('shuffleboardSettings');
+            
+            if (savedSettings) {
+                try {
+                    const parsedSettings = JSON.parse(savedSettings);
+                    // Merge saved settings with defaults
+                    this.settings = {
+                        ...this.settings,  // Default settings
+                        ...parsedSettings, // Override with saved settings
+                        // Ensure nested objects are properly merged
+                        graphics: {
+                            ...this.settings.graphics,
+                            ...(parsedSettings.graphics || {})
+                        },
+                        audio: {
+                            ...this.settings.audio,
+                            ...(parsedSettings.audio || {})
+                        },
+                        controls: {
+                            ...this.settings.controls,
+                            ...(parsedSettings.controls || {}),
+                            keybinds: {
+                                ...this.settings.controls.keybinds,
+                                ...(parsedSettings.controls?.keybinds || {})
+                            }
+                        },
+                        game: {
+                            ...this.settings.game,
+                            ...(parsedSettings.game || {})
+                        }
+                    };
+                    console.log('[DEBUG] Settings loaded from localStorage');
+                } catch (e) {
+                    console.warn('Error parsing saved settings, using defaults', e);
+                }
+            } else {
+                console.log('[DEBUG] No saved settings found, using defaults');
+            }
+        } catch (error) {
+            console.error('Error loading settings:', error);
+        }
+    }
+    
+    /**
+     * Shows the main menu screen and sets up the game state
+     */
+    showMainMenu() {
+        try {
+            console.log('[DEBUG] Showing main menu');
+            
+            // Update game state
+            this.setState('menu');
+            
+            // Reset camera position for menu
+            if (this.camera && this.cameraController) {
+                this.cameraController.resetCamera();
+            }
+            
+            // Show main menu in UI
+            if (this.ui) {
+                this.ui.showScreen('mainMenu');
+                
+                // Set up menu event listeners if not already set
+                if (!this._menuListenersSet) {
+                    this.ui.on('startGame', () => this.startGame());
+                    this.ui.on('openSettings', () => this.showSettings());
+                    this.ui.on('quitGame', () => this.quitGame());
+                    this._menuListenersSet = true;
+                }
+            }
+            
+            // Pause the game if it was running
+            if (this.getState() === 'playing') {
+                this.pauseGame();
+            }
+            
+            console.log('[DEBUG] Main menu shown');
+        } catch (error) {
+            console.error('Error showing main menu:', error);
+            this.ui?.showError('Failed to show main menu');
+        }
     }
 
     startTurn() {
@@ -1140,6 +1315,464 @@ class ShuffleboardGame {
         }
     }
 
+    /**
+     * Handles key down events
+     * @param {string} key - The key that was pressed
+     */
+    handleKeyDown(key) {
+        try {
+            if (!this.currentPlayer || this.getState() !== 'playing') return;
+            
+            // Handle player movement
+            switch (key) {
+                case 'ArrowLeft':
+                    this.currentPlayer.move('left');
+                    break;
+                case 'ArrowRight':
+                    this.currentPlayer.move('right');
+                    break;
+                case ' ':
+                    this.currentPlayer.startCharging();
+                    break;
+                case 'Escape':
+                    this.togglePause();
+                    break;
+            }
+        } catch (error) {
+            console.error('Error handling keydown:', error);
+            this.showError('Error processing input');
+        }
+    }
+    
+    /**
+     * Handles key up events
+     * @param {string} key - The key that was released
+     */
+    handleKeyUp(key) {
+        try {
+            if (!this.currentPlayer || this.getState() !== 'playing') return;
+            
+            // Handle key releases
+            switch (key) {
+                case ' ':
+                    const power = this.currentPlayer.stopCharging();
+                    if (power > 0) {
+                        this.currentPlayer.shoot(power, this.currentPlayer.angle);
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error('Error handling keyup:', error);
+            this.showError('Error processing input');
+        }
+    }
+    
+    /**
+     * Handles pointer down events (mouse/touch)
+     * @param {Object} position - The pointer position {x, y}
+     */
+    handlePointerDown(position) {
+        try {
+            if (this.getState() !== 'playing' || !this.currentPlayer) return;
+            this.currentPlayer.startCharging();
+        } catch (error) {
+            console.error('Error handling pointer down:', error);
+            this.showError('Error processing input');
+        }
+    }
+    
+    /**
+     * Handles pointer move events (mouse/touch)
+     * @param {Object} position - The pointer position {x, y}
+     */
+    handlePointerMove(position) {
+        try {
+            if (this.getState() !== 'playing' || !this.currentPlayer) return;
+            
+            // Calculate angle based on pointer position
+            // This is a simplified version - you might want to adjust based on your game's coordinate system
+            const angle = Math.atan2(
+                position.y - this.currentPlayer.position.y,
+                position.x - this.currentPlayer.position.x
+            );
+            
+            this.currentPlayer.rotate(angle);
+        } catch (error) {
+            console.error('Error handling pointer move:', error);
+        }
+    }
+    
+    /**
+     * Handles pointer up events (mouse/touch)
+     * @param {Object} position - The pointer position {x, y}
+     */
+    handlePointerUp(position) {
+        try {
+            if (this.getState() !== 'playing' || !this.currentPlayer) return;
+            
+            const power = this.currentPlayer.stopCharging();
+            if (power > 0) {
+                const angle = Math.atan2(
+                    position.y - this.currentPlayer.position.y,
+                    position.x - this.currentPlayer.position.x
+                );
+                this.currentPlayer.shoot(power, angle);
+            }
+        } catch (error) {
+            console.error('Error handling pointer up:', error);
+            this.showError('Error processing input');
+        }
+    }
+    
+    /**
+     * Displays an error message to the user
+     * @param {string} message - The error message to display
+     */
+    showError(message) {
+        console.error('Game Error:', message);
+        
+        // If UI is available, show the error in the UI
+        if (this.ui && typeof this.ui.showError === 'function') {
+            this.ui.showError(message);
+        } 
+        // Fallback to alert if UI is not available
+        else {
+            alert('Error: ' + message);
+        }
+    }
+
+    /**
+     * Starts a new game
+     */
+    startGame() {
+        try {
+            console.log('[DEBUG] Starting new game');
+            
+            // Reset game state
+            this.scores = [0, 0];
+            this.round = 1;
+            this.currentPlayerIndex = 0;
+            
+            // Reset players
+            if (this.players.length > 0) {
+                this.players.forEach(player => {
+                    if (player && typeof player.reset === 'function') {
+                        player.reset();
+                    }
+                });
+            }
+            
+            // Reset board
+            if (this.board && typeof this.board.reset === 'function') {
+                this.board.reset();
+            }
+            
+            // Update game state
+            this.setState('playing');
+            
+            // Show game screen
+            if (this.ui) {
+                this.ui.showScreen('game');
+                this.ui.updateScores(this.scores[0], this.scores[1]);
+                this.ui.updateTurnIndicator(this.currentPlayerIndex + 1);
+            }
+            
+            // Start the first turn
+            this.startTurn();
+            
+            console.log('[DEBUG] New game started');
+        } catch (error) {
+            console.error('Error starting game:', error);
+            this.showError('Failed to start game');
+            this.showMainMenu(); // Fall back to main menu on error
+        }
+    }
+    
+    /**
+     * Toggles the pause state of the game
+     */
+    togglePause() {
+        if (this.getState() === 'playing') {
+            this.pauseGame();
+        } else if (this.getState() === 'paused') {
+            this.resumeGame();
+        }
+    }
+    
+    /**
+     * Pauses the game
+     */
+    pauseGame() {
+        if (this.getState() === 'playing') {
+            console.log('[DEBUG] Pausing game');
+            this.setState('paused');
+            this.isPaused = true;
+            
+            // Show pause menu
+            if (this.ui) {
+                this.ui.showMessage(
+                    'Game Paused',
+                    'The game is currently paused',
+                    'Resume',
+                    () => this.resumeGame()
+                );
+            }
+        }
+    }
+    
+    /**
+     * Resumes a paused game
+     */
+    resumeGame() {
+        if (this.getState() === 'paused') {
+            console.log('[DEBUG] Resuming game');
+            this.setState('playing');
+            this.isPaused = false;
+            
+            // Hide any pause-related UI
+            if (this.ui) {
+                this.ui.hideMessage();
+            }
+            
+            // Restart the animation loop if it's not running
+            if (!this.animationFrameId) {
+                this.animate();
+            }
+        }
+    }
+    
+    /**
+     * Returns to the main menu from the game
+     */
+    returnToMainMenu() {
+        console.log('[DEBUG] Returning to main menu');
+        
+        // Confirm with the user if they're in the middle of a game
+        if (this.getState() === 'playing' || this.getState() === 'paused') {
+            this.ui.showConfirmation(
+                'Return to Main Menu',
+                'Are you sure you want to return to the main menu? Your current game progress will be lost.',
+                'Quit',
+                'Cancel',
+                () => {
+                    // On confirm
+                    this.showMainMenu();
+                },
+                () => {
+                    // On cancel - resume game if it was paused
+                    if (this.getState() === 'paused') {
+                        this.resumeGame();
+                    }
+                }
+            );
+        } else {
+            this.showMainMenu();
+        }
+    }
+    
+    /**
+     * Restarts the current game
+     */
+    restartGame() {
+        console.log('[DEBUG] Restarting game');
+        
+        // Confirm with the user if they're in the middle of a game
+        if (this.getState() === 'playing' || this.getState() === 'paused') {
+            this.ui.showConfirmation(
+                'Restart Game',
+                'Are you sure you want to restart the game? Your current progress will be lost.',
+                'Restart',
+                'Cancel',
+                () => {
+                    // On confirm
+                    this.startGame();
+                },
+                () => {
+                    // On cancel - resume game if it was paused
+                    if (this.getState() === 'paused') {
+                        this.resumeGame();
+                    }
+                }
+            );
+        } else {
+            this.startGame();
+        }
+    }
+    
+    /**
+     * Applies audio settings to the game
+     */
+    applyAudioSettings() {
+        console.log('[DEBUG] Applying audio settings');
+        
+        // Apply master volume
+        if (this.audioListener && typeof this.audioListener.setMasterVolume === 'function') {
+            this.audioListener.setMasterVolume(this.settings.audio.masterVolume);
+        }
+        
+        // Apply music volume if music is playing
+        if (this.backgroundMusic && typeof this.backgroundMusic.setVolume === 'function') {
+            this.backgroundMusic.setVolume(this.settings.audio.musicVolume * this.settings.audio.masterVolume);
+        }
+        
+        // Save settings
+        this.saveSettings();
+    }
+    
+    /**
+     * Applies graphics settings to the game
+     */
+    applyGraphicsSettings() {
+        console.log('[DEBUG] Applying graphics settings');
+        
+        if (!this.renderer) return;
+        
+        // Apply quality settings
+        switch (this.settings.graphics.quality) {
+            case 'low':
+                this.renderer.shadowMap.enabled = false;
+                this.renderer.antialias = false;
+                if (this.sunLight) this.sunLight.castShadow = false;
+                break;
+                
+            case 'high':
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.antialias = true;
+                if (this.sunLight) this.sunLight.castShadow = true;
+                // Enable higher quality shadows
+                if (this.sunLight?.shadow) {
+                    this.sunLight.shadow.mapSize.width = 4096;
+                    this.sunLight.shadow.mapSize.height = 4096;
+                }
+                break;
+                
+            case 'medium':
+            default:
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.antialias = true;
+                if (this.sunLight) this.sunLight.castShadow = true;
+                // Medium quality shadows
+                if (this.sunLight?.shadow) {
+                    this.sunLight.shadow.mapSize.width = 2048;
+                    this.sunLight.shadow.mapSize.height = 2048;
+                }
+        }
+        
+        // Apply pixel ratio
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        
+        // Save settings
+        this.saveSettings();
+    }
+    
+    /**
+     * Checks if the game is over based on current scores
+     * @returns {boolean} True if the game is over, false otherwise
+     */
+    checkGameOver() {
+        try {
+            // Check if either player has reached the winning score
+            const player1Wins = this.scores[0] >= this.winningScore;
+            const player2Wins = this.scores[1] >= this.winningScore;
+            
+            if (player1Wins || player2Wins) {
+                const winner = player1Wins ? 1 : 2;
+                this.endGame(winner);
+                return true;
+            }
+            
+            // Check if all discs have been played
+            const allDiscsPlayed = this.players.every(player => !player.hasDiscsLeft());
+            if (allDiscsPlayed) {
+                // Game ends, determine winner by highest score
+                const winner = this.scores[0] > this.scores[1] ? 1 : 
+                              this.scores[1] > this.scores[0] ? 2 : 0; // 0 means tie
+                
+                this.endGame(winner);
+                return true;
+            }
+            
+            return false;
+        } catch (error) {
+            console.error('Error checking game over condition:', error);
+            return false;
+        }
+    }
+    
+    /**
+     * Handles the end of the game
+     * @param {number} winner - The player number who won (0 for tie)
+     */
+    endGame(winner) {
+        try {
+            // Set game state to game over
+            this.setState('gameOver');
+            
+            // Show game over screen with results
+            if (this.ui) {
+                let title, message;
+                
+                if (winner === 0) {
+                    title = "It's a Tie!";
+                    message = `Both players scored ${this.scores[0]} points!`;
+                } else {
+                    const isAI = this.players[winner - 1]?.isAI;
+                    title = isAI ? "Game Over" : `Player ${winner} Wins!`;
+                    message = `Final Score - Player 1: ${this.scores[0]} | ${isAI ? 'AI' : 'Player 2'}: ${this.scores[1]}`;
+                }
+                
+                this.ui.showGameOver(title, message);
+            }
+            
+            // Save high score if applicable
+            this.saveHighScore();
+            
+        } catch (error) {
+            console.error('Error ending game:', error);
+        }
+    }
+    
+    /**
+     * Saves the high score if it's a new record
+     */
+    saveHighScore() {
+        try {
+            const highScores = JSON.parse(localStorage.getItem('shuffleboardHighScores') || '[]');
+            const currentScore = Math.max(...this.scores);
+            
+            // Only save if it's a new high score
+            if (highScores.length < 10 || currentScore > Math.min(...highScores)) {
+                highScores.push({
+                    score: currentScore,
+                    date: new Date().toISOString(),
+                    winner: this.scores[0] > this.scores[1] ? 'Player 1' : 
+                           this.scores[1] > this.scores[0] ? 'AI' : 'Tie'
+                });
+                
+                // Sort in descending order and keep top 10
+                highScores.sort((a, b) => b.score - a.score);
+                if (highScores.length > 10) {
+                    highScores.length = 10;
+                }
+                
+                localStorage.setItem('shuffleboardHighScores', JSON.stringify(highScores));
+            }
+        } catch (error) {
+            console.error('Error saving high score:', error);
+        }
+    }
+    
+    /**
+     * Saves current settings to localStorage
+     */
+    saveSettings() {
+        try {
+            localStorage.setItem('shuffleboardSettings', JSON.stringify(this.settings));
+            console.log('[DEBUG] Settings saved');
+        } catch (error) {
+            console.error('Error saving settings:', error);
+        }
+    }
 }
 
 export { ShuffleboardGame, initGame };
